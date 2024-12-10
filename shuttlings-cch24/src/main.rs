@@ -8,7 +8,6 @@ use axum::{
   routing::{get, post}, 
   Router};
 use serde::{Deserialize};
-use toml::Value;
 
 #[derive(Deserialize, Default)]
 struct FromKey {
@@ -27,19 +26,54 @@ struct SendPackageData {
 }
 #[derive(Deserialize, Default, Debug)]
 struct Package {
-  name: String,
-  authors: Vec<String>,
-  keywords: Vec<String>,
+  _name: String,
+  _authors: Vec<String>,
+  _keywords: Vec<String>,
   metadata: Option<Metadatas>,
 }
 #[derive(Debug, Deserialize)]
 struct Metadatas {
   orders: Vec<Metadata>,
 }
+// #[derive(Debug, Deserialize)]
+// #[serde(untagged)] // 自動的に型を推測
+// enum Input {
+//     Number(u32),
+//     Text(String),
+// }
 #[derive(Deserialize, Default, Debug)]
 struct Metadata {
   item: String,
-  quantity: i64
+  #[serde(deserialize_with = "deserialize_quantity")]
+  quantity: String
+}
+
+fn deserialize_quantity<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+  D: serde::Deserializer<'de>,
+{
+  use serde::de::{self, Visitor};
+  use std::fmt;
+  struct QuantityVisitor;
+  impl<'de> Visitor<'de> for QuantityVisitor {
+    type Value = String;
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+      formatter.write_str("a string or an integer")
+    }
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Ok(v.to_string())
+    }
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      Ok(v.to_string())
+    }
+  }
+  deserializer.deserialize_any(QuantityVisitor)
 }
 
 async fn hello_world() -> &'static str {
@@ -115,22 +149,29 @@ async fn calcuv6_key(Query(params): Query<FromTo>) -> String {
   return_key
 }
 async fn manifest5(body: String) -> Result<String,StatusCode> {
-  let req: Value = body.clone().parse().unwrap();
-  println!("=\n{}\n=",&body);
+  // let req: Value = body.clone().parse().unwrap();
+  // println!("=\n{}\n=",&body);
   // println!("{:?}",req["package"]);
   // println!("{:?}",req["package"]["metadata"]);
 
   let p:SendPackageData = toml::from_str(&body).unwrap();
-  println!("これできてる？\n{:?}",p);
 
-  let package: Result<SendPackageData, toml::de::Error> = toml::from_str::<SendPackageData>(&body);
-  let perse_data = (match package {
-    Ok(p) => {println!("data\n{:?}",p); p},
-    Err(_err) => SendPackageData{package: Package{name:"".to_string(), authors:vec!["".to_string()], keywords:vec![], metadata: Some(Metadatas{ orders: vec![]})}}
-  });
-  println!("\n--\n{:?}",perse_data);
-  
-  Ok("ggg".to_string())
+  // p.package.metadata.map(|data| println!("{:?}",data.orders));
+  let mut return_data = "".to_string();
+  match p.package.metadata {
+    Some(data) => {
+      // let return_data = data.orders.into_iter().map(|d| println!("{:?}",d));
+      for d in data.orders {
+        let mut qua = d.quantity;
+        if qua.parse::<u32>().is_ok(){
+          return_data += &format!("{}: {}\n",d.item,qua);
+        }
+      }
+      return_data.pop();
+      Ok(return_data)
+    },
+    None => Err(StatusCode::NO_CONTENT)
+  }
 }
 
 #[shuttle_runtime::main]
