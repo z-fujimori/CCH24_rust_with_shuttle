@@ -26,25 +26,26 @@ struct SendPackageData {
 }
 #[derive(Deserialize, Default, Debug)]
 struct Package {
-  _name: String,
-  _authors: Vec<String>,
-  _keywords: Vec<String>,
+  name: String,
+  authors: Vec<String>,
+  keywords: Vec<String>,
   metadata: Option<Metadatas>,
 }
 #[derive(Debug, Deserialize)]
 struct Metadatas {
   orders: Vec<Metadata>,
 }
-// #[derive(Debug, Deserialize)]
-// #[serde(untagged)] // 自動的に型を推測
-// enum Input {
-//     Number(u32),
-//     Text(String),
-// }
+#[derive(Debug, Deserialize)]
+#[serde(untagged)] // 自動的に型を推測
+enum Input {
+    Number(u32),
+    Text(String),
+}
 #[derive(Deserialize, Default, Debug)]
 struct Metadata {
-  item: String,
   #[serde(deserialize_with = "deserialize_quantity")]
+  item: String,
+  // #[serde(deserialize_with = "deserialize_quantity")]
   quantity: String
 }
 
@@ -156,6 +157,8 @@ async fn manifest5(body: String) -> Result<String,StatusCode> {
 
   let p:SendPackageData = toml::from_str(&body).unwrap();
 
+  let mut flag = false;
+
   // p.package.metadata.map(|data| println!("{:?}",data.orders));
   let mut return_data = "".to_string();
   match p.package.metadata {
@@ -163,12 +166,21 @@ async fn manifest5(body: String) -> Result<String,StatusCode> {
       // let return_data = data.orders.into_iter().map(|d| println!("{:?}",d));
       for d in data.orders {
         let mut qua = d.quantity;
-        if qua.parse::<u32>().is_ok(){
-          return_data += &format!("{}: {}\n",d.item,qua);
+        let mut item = d.item;
+        if qua.parse::<u32>().is_ok() && item.parse::<u32>().is_err(){
+          return_data += &format!("{}: {}\n",item,qua);
+        } else {
+          flag = true;
         }
       }
-      return_data.pop();
-      Ok(return_data)
+      if flag {
+        Err(StatusCode::NO_CONTENT)
+      } else if return_data == "" {
+        Err(StatusCode::NO_CONTENT)
+      } else {
+        return_data.pop();
+        Ok(return_data)
+      }
     },
     None => Err(StatusCode::NO_CONTENT)
   }
